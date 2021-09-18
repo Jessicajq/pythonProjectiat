@@ -54,7 +54,7 @@ def setTaskStatus(taskId,status, msg):
 
 def updateTaskResult(taskId,result,msg):
   data = {
-    'result': json.dumps(result,ensure_ascii=False)
+    'result': json.dumps(result, ensure_ascii=False)
   }
   rowData = Task.query.filter_by(id=taskId)
   rowData.update(data)
@@ -113,7 +113,7 @@ def configTestElement(test_domain,params=None,proxy=None):
   ET.SubElement(ConfigTestElement, 'stringProp', {"name": "HTTPSampler.domain"}).text = domain
   ET.SubElement(ConfigTestElement, 'stringProp', {"name": "HTTPSampler.port"}).text = port
   ET.SubElement(ConfigTestElement, 'stringProp', {"name": "HTTPSampler.protocol"}).text = protocol
-  ET.SubElement(ConfigTestElement, 'stringProp', {"name": "HTTPSampler.contentEncoding"})
+  ET.SubElement(ConfigTestElement, 'stringProp', {"name": "HTTPSampler.contentEncoding"}).text = 'utf-8'
   ET.SubElement(ConfigTestElement, 'stringProp', {"name": "HTTPSampler.path"})
   ET.SubElement(ConfigTestElement, 'stringProp', {"name": "HTTPSampler.concurrentPool"}).text = "6"
   if proxy:
@@ -173,6 +173,7 @@ def headerManager(headers=None):
         paramElementProp = ET.Element('elementProp',{"name":"", "elementType":"Header"})
         ET.SubElement(paramElementProp,'stringProp',{"name":"Header.name"}).text = item["key"]
         ET.SubElement(paramElementProp,'stringProp',{"name":"Header.value"}).text = item["value"]
+        ET.SubElement(paramElementProp, 'stringProp', {"name": "HTTPSampler.contentEncoding"}).text = "utf-8"
         collectionProp.append(paramElementProp)
   return HeaderManager
 
@@ -230,7 +231,7 @@ def HTTPSamplerProxy(sample):
   ET.SubElement(HTTPSamplerProxy, 'stringProp', {"name": "HTTPSampler.domain"}).text = domain
   ET.SubElement(HTTPSamplerProxy, 'stringProp', {"name": "HTTPSampler.port"}).text = port
   ET.SubElement(HTTPSamplerProxy, 'stringProp', {"name": "HTTPSampler.protocol"}).text = protocol
-  ET.SubElement(HTTPSamplerProxy, 'stringProp', {"name": "HTTPSampler.contentEncoding"})
+  ET.SubElement(HTTPSamplerProxy, 'stringProp', {"name": "HTTPSampler.contentEncoding"}).text='utf-8'
   ET.SubElement(HTTPSamplerProxy, 'stringProp', {"name":"HTTPSampler.path"}).text = sample['path']
   ET.SubElement(HTTPSamplerProxy, 'stringProp', {"name":"HTTPSampler.method"}).text = sample['method']
   ET.SubElement(HTTPSamplerProxy, 'stringProp', {"name":"HTTPSampler.follow_redirects"}).text = "false"
@@ -463,7 +464,7 @@ def getTaskInfo(taskId):
           paramData = iatCaseInfo.query.filter_by(pid=caseId).first()
           if paramData:
             params.append({
-              'value': paramData.body_data.encode('utf-8'),
+              'value': paramData.body_data,
             })
         else:
           paramDatas = iatKeyValues.query.filter(
@@ -558,14 +559,14 @@ def runScript(task_id):
     reulstPath = makeResultPath(taskRootPath)
     tree = read_demo('templete.jmx')
     tree = set_data(tree, data=taskInfo, isDebug=True, taskRootDir=reulstPath)
-    tree.write(reulstPath + '/testData.jmx')
+    tree.write(reulstPath + '/testData.jmx', "utf-8", xml_declaration="1.0")
     setTaskStatus(task_id, 2, "build task script")
     runJmeterTest(reulstPath)
-    setTaskStatus(task_id, 3, "excute script sucess")
+    setTaskStatus(task_id, 3, "excute script success")
     try:
       resultContent = readResult(reulstPath, isDebug=True)
       updateTaskResult(task_id, resultContent, "upload result")
-      clear_project_file('taskFile/' + taskRootPath)
+      #clear_project_file('taskFile/' + taskRootPath)
     except Exception as e:
       print(e)
       setTaskStatus(task_id, 5, "task fail,please check jmeter env")

@@ -33,6 +33,7 @@ def addCaseData(caseId, userId, caseInfo):
     caseInfo['assertType'],
     caseInfo['extractType'],
     userId,
+    body_data = None,
   )
   db.session.add(data)
   db.session.commit()

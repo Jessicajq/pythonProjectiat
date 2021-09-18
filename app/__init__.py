@@ -18,7 +18,9 @@ app.config['PERMANENT_SESSION_LIFETIME']=timedelta(days=1) #设置session的保�
 from flask_sqlalchemy import SQLAlchemy
 
 #我本地 app.config["SQLALCHEMY_DATABASE_URI"] = "mysql+pymysql://root@localhost:3306/ITA?charset=utf8mb4"
-app.config["SQLALCHEMY_DATABASE_URI"] = "mysql+pymysql://root:ailpha123456@10.50.2.202:33306/IAT?charset=utf8mb4"
+#test环境
+app.config["SQLALCHEMY_DATABASE_URI"] = "mysql+pymysql://root:ailpha123456@10.50.2.202:33306/IAT?charset=utf8"
+#app.config["SQLALCHEMY_DATABASE_URI"] = "mysql+pymysql://root:ailpha123456@10.50.2.202:33306/IAT_pro?charset=utf8mb4"
 # 动态追踪数据库的修改. 性能不好. 且未来版本中会移除. 目前只是为了解决控制台的提示才写的
 app.config["SQLALCHEMY_POOL_SIZE"] = 100
 app.config["SQLALCHEMY_POOL_RECYCLE"] = 8

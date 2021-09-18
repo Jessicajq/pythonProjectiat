@@ -1,6 +1,6 @@
 # -*-coding:utf-8-*-
 from flask import Blueprint, jsonify, make_response, session, request
-from app.tables.IAT import Project, Tree, Sample, Task, TaskCount, GlobalValues, iatCaseInfo
+from app.tables.IAT import Project, Tree, Sample, Task, TaskCount, GlobalValues, iatCaseInfo, iatKeyValues, iatShellData
 from app.tables.User import users
 import os,hashlib,subprocess, json, time, datetime, binascii, requests
 from sqlalchemy import extract
@@ -15,7 +15,7 @@ def encrypt_name(name, salt=None, encryptlop=30):
     name = hashlib.sha1(str(name + salt).encode('utf-8')).hexdigest()  # length 64
   return name
 
-def addTreeNote(project_id, pid, name, type, user_id, index_id):
+def addTreeNote(project_id, pid, name, type, user_id, index_id, case_describe):
   '''
   :param pid: 父节点id
   :param name: 节点名称
@@ -23,7 +23,7 @@ def addTreeNote(project_id, pid, name, type, user_id, index_id):
   :param user_id: 用户id
   :return: 节点 id
   '''
-  data = Tree(project_id, pid, name, type, user_id, index_id)
+  data = Tree(project_id, pid, name, type, user_id, index_id, case_describe)
   db.session.add(data)
   db.session.commit()
   return data.id
@@ -37,7 +37,7 @@ def addProject():
     data = Project(name, 1, user_id)
     db.session.add(data)
     db.session.commit()
-    addTreeNote(data.id, 0, name, 1, user_id, 0)
+    addTreeNote(data.id, 0, name, 1, user_id, 0, '')
     return make_response(jsonify({'code': 0, 'content': None, 'msg': u'新建成功!'}))
   except Exception as e:
     return make_response(jsonify({'code': 10002, 'content': None, 'msg': u'新建失败!'}))
@@ -58,7 +58,7 @@ def projectList():
   content = []
   if projectList:
     for item in projectList:
-      caseCount = Sample.query.filter(db.and_(Sample.project_id == item.id)).count()
+      caseCount = Tree.query.filter(db.and_(Tree.project_id == item.id, Tree.type == 2)).count()
       row_data = users.query.filter(db.and_(users.id == item.user_id)).first()
       username = ""
       if row_data:
@@ -84,7 +84,7 @@ def setProjectStatus():
   if row_data.first():
     row_data.update(data)
     db.session.commit()
-    return make_response(jsonify({'code': 0, 'msg': 'sucess', 'content': []}))
+    return make_response(jsonify({'code': 0, 'msg': '操作成功', 'content': []}))
   else:
     return make_response(jsonify({'code': 10001, 'msg': 'no such Project', 'content': []}))
 
@@ -94,6 +94,7 @@ def updateTreeIndex():
   dropKey = request.json.get("dropKey")
   dragKey = request.json.get("dragKey")
   dropData = Tree.query.filter_by(id=dropKey).first()
+  dragData = Tree.query.filter_by(id=dragKey).first()
   if dropData.type == 1:
     pid = dropKey
   if dropData.type == 2:
@@ -103,7 +104,10 @@ def updateTreeIndex():
   if row_data.first():
     row_data.update(data)
     db.session.commit()
-    return make_response(jsonify({'code': 0, 'msg': 'sucess', 'content': []}))
+  if dropData.pid == dragData.pid:
+    dropData.index_id, dragData.index_id = dragData.index_id, dropData.index_id
+    db.session.commit()
+    return make_response(jsonify({'code': 0, 'msg': '顺序更新成功', 'content': []}))
   else:
     return make_response(jsonify({'code': 10001, 'msg': 'no such Project', 'content': []}))
 
@@ -129,7 +133,7 @@ def treeList():
 
   content = getChild(0)
 
-  return make_response(jsonify({'code': 0, 'msg': 'sucess', 'content': content}))
+  return make_response(jsonify({'code': 0, 'msg': 'success操作成功', 'content': content}))
 
 
 @api.route('/projectCaseList', methods=['POST'])
@@ -145,7 +149,7 @@ def projectCaseList():
         "key": case.id,
         "name": case.name,
       })
-  return make_response(jsonify({'code': 0, 'msg': 'sucess', 'content': content}))
+  return make_response(jsonify({'code': 0, 'msg': 'success', 'content': content}))
 
 
 @api.route('/addSubFolder', methods=['POST'])
@@ -157,7 +161,7 @@ def addSubFolder():
     project_id = Tree.query.filter_by(id=id).first().project_id
     index_id = Tree.query.filter(db.and_(Tree.project_id == project_id, )).order_by(
       db.desc(Tree.index_id)).first().index_id
-    data = Tree(project_id, id, name, 1, user_id, index_id + 1)
+    data = Tree(project_id, id, name, 1, user_id, index_id + 1,case_describe=None)
     db.session.add(data)
     db.session.commit()
     return make_response(jsonify({'code': 0, 'content': None, 'msg': u'新建成功!'}))
@@ -190,7 +194,8 @@ def deleteCase():
   id = request.json.get("id")
   try:
     rowData = Tree.query.filter(db.and_(Tree.id == id)).first()
-    sampleData = Sample.query.filter_by(pid=id).first()
+    #sampleData = Sample.query.filter_by(pid=id).first()
+    sampleData = iatCaseInfo.query.filter_by(pid=id).first()
     if rowData:
       db.session.delete(rowData)
       if sampleData:
@@ -209,19 +214,40 @@ def copyCase():
   id = request.json.get("id")
   try:
     rowData = Tree.query.filter(db.and_(Tree.id == id)).first()
-    sampleData = Sample.query.filter_by(pid=id).first()
-    data = Tree(rowData.project_id, rowData.pid, rowData.name, rowData.type, rowData.user_id, rowData.index_id)
+    #sampleData = Sample.query.filter_by(pid=id).first()
+    iatCaseInfoData = iatCaseInfo.query.filter_by(pid=id).first()
+    sampleShellData = iatShellData.query.filter_by(pid=id).all()
+    sampleKeyValueData = iatKeyValues.query.filter_by(pid=id).all()
+    globalData = GlobalValues.query.filter_by(case_id=id).all()
+    project_id = rowData.project_id
+    index_id = Tree.query.filter(db.and_(Tree.project_id == project_id, )).order_by(
+      db.desc(Tree.index_id)).first().index_id
+    data = Tree(rowData.project_id, rowData.pid, rowData.name, rowData.type, rowData.user_id, index_id+1, rowData.case_describe)
     db.session.add(data)
     db.session.commit()
-    if sampleData:
-      addData = Sample(data.id, sampleData.path, sampleData.method,sampleData.param_type, sampleData.params, sampleData.asserts_type,
-                       sampleData.asserts_data, sampleData.extract_type, sampleData.extract_key_name,
-                       sampleData.extract_data, user_id, sampleData.project_id,sampleData.pre_shell_type,sampleData.pre_shell_data,sampleData.post_shell_type,sampleData.post_shell_data)
-      db.session.add(addData)
+    if iatCaseInfoData:
+      addCaseInfoData = iatCaseInfo(data.id, iatCaseInfoData.domain, iatCaseInfoData.method,
+                                    iatCaseInfoData.path, iatCaseInfoData.param_type,
+                                    iatCaseInfoData.assert_type,iatCaseInfoData.extract_type,
+                                    user_id,iatCaseInfoData.body_data)
+      db.session.add(addCaseInfoData)
+      db.session.commit()
+    for shellid in sampleShellData:
+      addShellData = iatShellData(data.id, shellid.shell_type, shellid.shell_data)
+      db.session.add(addShellData)
+      db.session.commit()
+    for keyvalueid in sampleKeyValueData:
+      addKeyValueData = iatKeyValues(keyvalueid.key_name, keyvalueid.key_value, data.id,user_id,keyvalueid.value_type)
+      db.session.add(addKeyValueData)
+      db.session.commit()
+    for globalid in globalData:
+      print('globalid is',globalid)
+      addglobalData = GlobalValues(globalid.key_name,globalid.key_value,globalid.project_id,user_id,globalid.value_type,data.id)
+      db.session.add(addglobalData)
       db.session.commit()
     return make_response(jsonify({'code': 0, 'content': None, 'msg': u'复制成功!'}))
   except Exception as e:
-    return make_response(jsonify({'code': 10002, 'content': None, 'msg': u'复制成功!'}))
+    return make_response(jsonify({'code': 10002, 'content': None, 'msg': u'复制失败!'}))
 
 
 @api.route('/addCase', methods=['POST'])
@@ -233,7 +259,7 @@ def addCase():
     project_id = Tree.query.filter_by(id=id).first().project_id
     index_id = Tree.query.filter(db.and_(Tree.project_id == project_id, )).order_by(
       db.desc(Tree.index_id)).first().index_id
-    data = Tree(project_id, id, name, 2, user_id, index_id + 1)
+    data = Tree(project_id, id, name, 2, user_id, index_id + 1,case_describe=None)
     db.session.add(data)
     db.session.commit()
     return make_response(jsonify({'code': 0, 'content': {"id":data.id}, 'msg': u'新建成功!'}))
@@ -503,7 +529,7 @@ def taskPrew():
   id = request.values.get("id")
   taskData = Task.query.filter(db.and_(Task.id == id, )).first()
   caseIds = []
-  for caseId in json.loads(taskData.case):
+  for caseId in json.loads(taskData.case, encoding='utf-8'):
     caseIds.append(caseId)
   content = {
     "id": taskData.id,
@@ -627,12 +653,13 @@ def updateFolderName():
   user_id = session.get('user_id')
   id = request.json.get("id")
   name = request.json.get("name")
-  data = {'name': name}
+  case_describe = request.json.get("caseDescribe")
+  data = {'name': name, 'case_describe': case_describe}
   folderData = Tree.query.filter_by(id=id)
   if folderData.first():
     folderData.update(data)
     db.session.commit()
-    return make_response(jsonify({'code': 0, 'msg': 'sucess', 'content': []}))
+    return make_response(jsonify({'code': 0, 'msg': 'success', 'content': []}))
   else:
     return make_response(jsonify({'code': 10001, 'msg': 'fail', 'content': []}))
 
@@ -646,7 +673,7 @@ def updateTaskStatus():
   if taskData.first():
     taskData.update(data)
     db.session.commit()
-    return make_response(jsonify({'code': 0, 'msg': 'sucess', 'content': []}))
+    return make_response(jsonify({'code': 0, 'msg': 'success', 'content': []}))
   else:
     return make_response(jsonify({'code': 10001, 'msg': 'fail', 'content': []}))
 
@@ -684,11 +711,13 @@ def formatMounthResult(dayDatas):
 @api.route('/getHomeData')
 def getHomeData():
   user_id = session.get('user_id')
-  caseCount = Sample.query.filter().count()
+  caseCount = Tree.query.filter(db.and_(Tree.type == 2)).count()
+    #iatCaseInfo.query.filter(db.and_(iatCaseInfo.extract_type == 0)).count()
+    # caseCount = Sample.query.filter().count()
   projectCount = Project.query.filter(db.and_(Project.status == 1)).count()
   immTaskCount = Task.query.filter(db.and_(Task.task_type == 1)).count()
   timTaskCount = Task.query.filter(db.and_(Task.task_type == 2)).count()
-  nearTasks = Task.query.filter(db.and_(Task.task_type != 3)).order_by(db.desc(Task.add_time)).limit(20).all()
+  nearTasks = Task.query.filter(db.and_(Task.task_type != 3, Task.status == 3)).order_by(db.desc(Task.add_time)).limit(20).all()
   historys = TaskCount.query.filter(
     db.and_(
       extract('year', TaskCount.add_time) == datetime.datetime.now().year,
@@ -773,7 +802,7 @@ def updateTaskResult():
   if taskData.first():
     taskData.update(data)
     db.session.commit()
-    return make_response(jsonify({'code': 0, 'msg': 'update sucess', 'content': []}))
+    return make_response(jsonify({'code': 0, 'msg': 'update success', 'content': []}))
   else:
     return make_response(jsonify({'code': 10001, 'msg': 'update fail', 'content': []}))
 
@@ -809,7 +838,7 @@ def updateSample():
   if sampleData.first():
     sampleData.update(data)
     db.session.commit()
-    return make_response(jsonify({'code': 0, 'msg': u'sucess', 'content': []}))
+    return make_response(jsonify({'code': 0, 'msg': u'success', 'content': []}))
   else:
     project_id = Tree.query.filter_by(id=id).first().project_id
     addData = Sample(id, info["path"], info["method"],info["paramType"], json.dumps(info["params"]), 1,
@@ -855,6 +884,10 @@ def debugSample():
           res = requests.post(url, headers=formartHeaders, data=formatParams, verify=False)
       elif rowData.method == 'GET':
         res = requests.get(url, headers=headers, params=req_params, verify=False)
+      elif rowData.method == 'DELETE':
+        res = requests.delete(url, headers=headers, params=req_params, verify=False)
+      elif rowData.method == 'HEAD':
+        res = requests.head(url, headers=headers, params=req_params, verify=False)
       elif rowData.method == 'PUT':
         if rowData.param_type == 3:
           formartHeaders = headers
@@ -900,7 +933,7 @@ def debugSample():
     except Exception as e:
       return make_response(jsonify({'code': 10001, 'content': None, 'msg': 'server error!'}))
 
-@api.route('/uploadFile',methods=['POST'])
+@api.route('/',methods=['POST'])
 def uploadFile():
   user_id = session.get('user_id')
   upload_file = request.files["file"]
@@ -923,7 +956,7 @@ def uploadFile():
       print('开始导入json')
       subprocess.call('python runAutoBuildFromSwagger.py runScript -u %s -p %s -f %s' % (user_id, id, filePath), shell=True)
       os.remove(filePath)
-    return make_response(jsonify({'code': 0, 'content':None, 'msg': 'upload sucess'}))
+    return make_response(jsonify({'code': 0, 'content':None, 'msg': 'upload success'}))
   else:
     return make_response(jsonify({'code': 10002, 'content':None, 'msg': 'upload fail!'}))
 
@@ -935,16 +968,23 @@ def projectRootInfo():
   if treeData:
     content['name'] = treeData.name
 
-  return make_response(jsonify({'code': 0, 'content': content, 'msg': ''}))
+  return make_response(jsonify({'code': 0, 'content': content, 'msg': '操作成功'}))
 
 def syncTreeName(id,name):
   rowData = Tree.query.filter_by(id=id)
+  projectId = Tree.query.filter_by(id=id).first().project_id
+  print('this is rowdata ',projectId)
+  projectData = Project.query.filter_by(id=projectId)
+  print('this is project ...', projectData)
   if rowData:
     data = {
-      'name': name,
+      'name': name
     }
     rowData.update(data)
     db.session.commit()
+    if rowData.first().pid == 0:
+      projectData.update(data)
+      db.session.commit()
 
 @api.route('/uploadTreeName',methods=['POST'])
 def uploadTreeName():
@@ -1004,6 +1044,7 @@ def deleteGlobalValues():
   id = request.json.get("id")
   try:
     rowData = GlobalValues.query.filter_by(id = id).first()
+    print("this is ", rowData)
     if rowData:
       oldKeyName = rowData.key_name
       projectId = rowData.project_id
@@ -1046,3 +1087,25 @@ def updateGlobalValues():
       otherRowData.update(data)
       db.session.commit()
   return make_response(jsonify({'code': 0, 'content': None, 'msg': u'操作成功'}))
+
+@api.route('/copyTask', methods=['POST'])
+def copyTask():
+  user_id = session.get('user_id')
+  id = request.json.get("id")
+  isTimeTask = request.json.get('isTimeTask')
+  try:
+    taskDataCopy = Task.query.filter(db.and_(Task.id == id)).first()
+    if isTimeTask == 0:
+      datatask = Task('(copy by)'+taskDataCopy.name, taskDataCopy.task_desc, taskDataCopy.project_id, taskDataCopy.task_type,
+                    '00:00', taskDataCopy.domain, json.dumps([]), json.dumps([]), taskDataCopy.proxy, taskDataCopy.case, user_id, 0, 1)
+      db.session.add(datatask)
+      db.session.commit()
+    elif isTimeTask == 1:
+      datatask = Task('(copy by)' + taskDataCopy.name, taskDataCopy.task_desc, taskDataCopy.project_id,
+                      2, '12:00', taskDataCopy.domain, json.dumps([]), json.dumps([]), taskDataCopy.proxy,
+                      taskDataCopy.case, user_id, 0, 1)
+      db.session.add(datatask)
+      db.session.commit()
+    return make_response(jsonify({'code': 0, 'content': None, 'msg': u'任务复制成功!'}))
+  except Exception as e:
+    return make_response(jsonify({'code': 10002, 'content': None, 'msg': u'任务复制失败!'}))

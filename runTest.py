@@ -67,7 +67,7 @@ def setTaskCount(result):
   db.session.commit()
 
 def updateTaskResult(taskId,result,msg):
-  result = json.dumps(result)
+  result = json.dumps(result, ensure_ascii=False)
   taskData = Task.query.filter_by(id=taskId)
   setTaskCount(result)
   if taskData.first().task_type == 1:
@@ -154,7 +154,7 @@ def configTestElement(test_domain,params=None,proxy=None):
   ET.SubElement(ConfigTestElement, 'stringProp', {"name": "HTTPSampler.domain"}).text = domain
   ET.SubElement(ConfigTestElement, 'stringProp', {"name": "HTTPSampler.port"}).text = port
   ET.SubElement(ConfigTestElement, 'stringProp', {"name": "HTTPSampler.protocol"}).text = protocol
-  ET.SubElement(ConfigTestElement, 'stringProp', {"name": "HTTPSampler.contentEncoding"})
+  ET.SubElement(ConfigTestElement, 'stringProp', {"name": "HTTPSampler.contentEncoding"}).text = 'utf-8'
   ET.SubElement(ConfigTestElement, 'stringProp', {"name": "HTTPSampler.path"})
   ET.SubElement(ConfigTestElement, 'stringProp', {"name": "HTTPSampler.concurrentPool"}).text = "6"
   if proxy:
@@ -271,7 +271,7 @@ def HTTPSamplerProxy(sample):
   ET.SubElement(HTTPSamplerProxy, 'stringProp', {"name": "HTTPSampler.domain"}).text = domain
   ET.SubElement(HTTPSamplerProxy, 'stringProp', {"name": "HTTPSampler.port"}).text = port
   ET.SubElement(HTTPSamplerProxy, 'stringProp', {"name": "HTTPSampler.protocol"}).text = protocol
-  ET.SubElement(HTTPSamplerProxy, 'stringProp', {"name": "HTTPSampler.contentEncoding"})
+  ET.SubElement(HTTPSamplerProxy, 'stringProp', {"name": "HTTPSampler.contentEncoding"}).text = 'utf-8'
   ET.SubElement(HTTPSamplerProxy, 'stringProp', {"name":"HTTPSampler.path"}).text = sample['path']
   ET.SubElement(HTTPSamplerProxy, 'stringProp', {"name":"HTTPSampler.method"}).text = sample['method']
   ET.SubElement(HTTPSamplerProxy, 'stringProp', {"name":"HTTPSampler.follow_redirects"}).text = "false"
@@ -455,9 +455,10 @@ def runJmeterTest(reulstPath):
 
 def readResult(path, isDebug=False):
   # 打开文件
-  data = pd.read_table(path+'/result.csv',sep=",")
+  data = pd.read_table(path+'/result.csv', encoding='utf-8', sep=",")
   columns = data.columns
   values = data.values
+  print('this is readresult', data,columns,values)
   content = []
   for valueIndex,case_result in enumerate(values):
     item = {}
@@ -466,9 +467,10 @@ def readResult(path, isDebug=False):
     if isDebug:
       if os.path.isfile(path + '/response'+str(valueIndex)+'.txt'):
         with open(path + '/response'+str(valueIndex)+'.txt', 'r', encoding='UTF-8') as f:
+          print("this id test", index)
           item['response'] = f.read()
     content.append(item)
-
+  print("this is content", content)
   return content
 
 def getTaskInfo(taskId):
@@ -598,14 +600,15 @@ def runScript(task_id):
     reulstPath = makeResultPath(taskRootPath)
     tree = read_demo('templete.jmx')
     tree = set_data(tree, data=taskInfo, isDebug=True, taskRootDir=reulstPath)
-    tree.write(reulstPath + '/testData.jmx')
+    tree.write(reulstPath + '/testData.jmx', "utf-8", xml_declaration="1.0")
     setTaskStatus(task_id, 2, "build task script")
     runJmeterTest(reulstPath)
-    setTaskStatus(task_id, 3, "excute script sucess")
+    setTaskStatus(task_id, 3, "excute script success")
     try:
       resultContent = readResult(reulstPath, isDebug=True)
+      print("this is resultcontent",resultContent)
       updateTaskResult(task_id, resultContent, "upload result")
-      clear_project_file('taskFile/' + taskRootPath)
+      #clear_project_file('taskFile/' + taskRootPath)
     except Exception as e:
       print(e)
       setTaskStatus(task_id, 5, "task fail,please check jmeter env")

@@ -1,45 +1,34 @@
 #-*-coding:utf-8-*-
-from flask import Flask
-import os
+from flask import Flask,blueprints
 from datetime import timedelta
 from flask_socketio import SocketIO
 
 app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = 'static/uploads/'
-app.config['DOMAIN'] = 'https://xxxxxxxx/xxx/'
+app.config['UPLOAD_FILE_FOLDER'] = 'static/proxy/uploads/'
+app.config['UPLOAD_TEST_FILE_FOLDER'] = 'static/file/uploads/'
+app.config['DOMAIN'] = 'http://127.0.0.1:5001/'
 app.config['ALLOWED_EXTENSIONS'] = set(['png', 'jpg', 'jpeg', 'gif','HTML','html','xlsx'])
-app.config['SECRET_KEY']= "thisisaverycooltestpalt"   #设置为24位的字符,每次运行服务器都是不同的，所以服务器启动一次上次的session就清除。
-app.config['PERMANENT_SESSION_LIFETIME']=timedelta(days=7) #设置session的保存时间。
-
-'''
-入口路由配置
-'''
-@app.route('/')
-def hello_world():
-    return 'Hello World!'
+app.config['SECRET_KEY']= "thisisaverycooltestpalt" #设置为24位的字符,每次运行服务器都是不同的，所以服务器启动一次上次的session就清除。
+app.config['PERMANENT_SESSION_LIFETIME']=timedelta(days=1) #设置session的保存时间。
 
 '''
 数据库对象创建
 '''
 from flask_sqlalchemy import SQLAlchemy
 
-app.config["SQLALCHEMY_DATABASE_URI"] = "mysql+pymysql://root:ailpha123456@10.50.2.202:33306/IAT_pro?charset=utf8mb4"
-app.config["SQLALCHEMY_POOL_RECYCLE"] = 15
+#我本地 app.config["SQLALCHEMY_DATABASE_URI"] = "mysql+pymysql://root@localhost:3306/ITA?charset=utf8mb4"
+#test环境
+app.config["SQLALCHEMY_DATABASE_URI"] = "mysql+pymysql://root:ailpha123456@10.50.2.202:33306/IAT_pro?charset=utf8"
+#app.config["SQLALCHEMY_DATABASE_URI"] = "mysql+pymysql://root:ailpha123456@10.50.2.202:33306/IAT_pro?charset=utf8mb4"
 # 动态追踪数据库的修改. 性能不好. 且未来版本中会移除. 目前只是为了解决控制台的提示才写的
-app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = True
+app.config["SQLALCHEMY_POOL_SIZE"] = 100
+app.config["SQLALCHEMY_POOL_RECYCLE"] = 8
+app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+app.config["SQLALCHEMY_ECHO"] = True
 db = SQLAlchemy(app)
+db.metadata.clear()
 socketio = SocketIO(app, cors_allowed_origins='*')
-'''
-数据库表更新
-'''
-def add_column(engine, table_name, column):
-  engine.execute('ALTER TABLE %s ADD %s ' % (table_name, column))
-try:
-  column = "(`pre_shell_type` smallint(6) , `pre_shell_data` mediumtext ,`post_shell_type` smallint(6) ,`post_shell_data` mediumtext)"
-  add_column(db.session, 'sample', column)
-  print ('创建新字段')
-except Exception as e:
-  print ("无需更新")
 
 '''
 注册蓝图
@@ -52,3 +41,9 @@ app.register_blueprint(user, url_prefix='/api')
 
 from .IAT.api import api
 app.register_blueprint(api, url_prefix='/api/IAT')
+
+from .IAT.case import iatCase
+app.register_blueprint(iatCase, url_prefix='/api/IAT/case')
+
+from .IAT.wstask import wstask
+app.register_blueprint(wstask)

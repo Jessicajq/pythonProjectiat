@@ -42,8 +42,9 @@ class Tree(db.Model):
   add_time = db.Column(db.DateTime)
   user_id = db.Column(db.Integer)
   index_id = db.Column(db.Integer)
+  case_describe = db.Column(db.String(1000))
 
-  def __init__(self,project_id,pid,name,type,user_id,index_id):
+  def __init__(self,project_id,pid,name,type,user_id,index_id, case_describe):
     self.project_id = project_id
     self.pid = pid
     self.name = name
@@ -51,6 +52,7 @@ class Tree(db.Model):
     self.add_time = datetime.now()
     self.user_id = user_id
     self.index_id = index_id
+    self.case_describe = case_describe
 
 class Sample(db.Model):
   __tablename__ = 'sample'
@@ -173,8 +175,8 @@ class iatKeyValues(db.Model):
     self.add_time = datetime.now()
 
 class iatShellData(db.Model):
-  __table_args__ = {'extend_existing': True}
   __tablename__ = 'iat_shell_data'
+  __table_args__ = {'extend_existing': True}
   id = db.Column(db.Integer, primary_key=True)
   pid = db.Column(db.Integer)
   shell_type = db.Column(db.SMALLINT)
@@ -188,8 +190,8 @@ class iatShellData(db.Model):
     self.add_time = datetime.now()
 
 class iatCaseInfo(db.Model):
-  __table_args__ = {'extend_existing': True}
   __tablename__ = 'iat_case_info'
+  __table_args__ = {'extend_existing': True}
   id = db.Column(db.Integer, primary_key=True)
   pid = db.Column(db.Integer)
   domain = db.Column(db.String(500))
@@ -202,7 +204,8 @@ class iatCaseInfo(db.Model):
   add_time = db.Column(db.DateTime)
   user_id = db.Column(db.Integer)
 
-  def __init__(self, pid, domain, method, path, param_type, assert_type, extract_type, user_id):
+
+  def __init__(self, pid, domain, method, path, param_type, assert_type, extract_type, user_id, body_data):
     self.pid = pid
     self.domain = domain
     self.method = method
@@ -211,4 +214,6 @@ class iatCaseInfo(db.Model):
     self.assert_type = assert_type
     self.extract_type = extract_type
     self.user_id = user_id
+    self.body_data = body_data
     self.add_time = datetime.now()
+

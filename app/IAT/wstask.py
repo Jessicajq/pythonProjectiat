@@ -9,11 +9,11 @@ wstask = Blueprint('wstask', __name__)
 
 @socketio.on('connect',namespace='/wstask')
 def get_connect():
-  print('connect client sucess')
+  print('connect client success')
 
 @socketio.on('disconnect',namespace='/wstask')
 def get_disconnect():
-  print('disconnect client sucess')
+  print('disconnect client success')
 
 @socketio.on('iatTaskInfo',namespace='/wstask')
 def iatTaskInfo(message):

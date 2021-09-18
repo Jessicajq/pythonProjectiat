@@ -123,6 +123,7 @@ def getCaseData():
     content = {
       'id': treeData.id,
       'name': treeData.name,
+      'caseDescribe': treeData.case_describe,
       'headerValues': headerValues,
       'paramsValues': paramsValues,
       'textAssertValues': textAssertValues,
@@ -242,11 +243,12 @@ def updateCaseData():
   caseId = request.json.get("caseId")
   caseInfo = request.json.get("caseInfo")
   rowData = iatCaseInfo.query.filter(db.and_(iatCaseInfo.pid == caseId))
+  print('rowdata is ',rowData)
   if rowData.first():
     data = {
-      'domain': caseInfo['domain'],
+      'domain': caseInfo['domain'].strip(),
       'method': caseInfo['method'],
-      'path': caseInfo['path'],
+      'path': caseInfo['path'].strip(),
       'param_type': caseInfo['paramType'],
       'assert_type': caseInfo['assertType'],
       'extract_type': caseInfo['extractType'],
@@ -257,13 +259,14 @@ def updateCaseData():
   else:
     data = iatCaseInfo(
       caseId,
-      caseInfo['domain'],
+      caseInfo['domain'].strip(),
       caseInfo['method'],
-      caseInfo['path'],
+      caseInfo['path'].strip(),
       caseInfo['paramType'],
       caseInfo['assertType'],
       caseInfo['extractType'],
       user_id,
+      body_data = None,
     )
     db.session.add(data)
     db.session.commit()
@@ -301,7 +304,7 @@ def debugCase():
   if rowData:
     projectId = Tree.query.filter_by(id=caseId).first().project_id
     # name,task_desc,project_id,task_type,run_time,domain,headers,params,proxy,case,user_id,status,value_type
-    data = Task('调试任务', '', projectId, 3, '00:00', domain, '', json.dumps([]), proxy, json.dumps([caseId]), user_id, 0, valueType)
+    data = Task('调试任务', '', projectId, 3, '00:00', domain, '', json.dumps([]), proxy, json.dumps([caseId], ensure_ascii=False), user_id, 0, valueType)
     db.session.add(data)
     db.session.commit()
     subprocess.Popen("python debugApiCaseScript.py runScript -i %s" % data.id, shell=True)
